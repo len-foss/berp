@@ -134,5 +134,9 @@ function _c {
   git commit -m "$COMMIT_NAME"
 }
 
+# test
+function _t {
+  gh workflow run test.yml --ref $(git rev-parse --abbrev-ref HEAD)
+}
 
 _$1 "$@"
