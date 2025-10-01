@@ -9,7 +9,12 @@ CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD)
 
 # checkout ticket branch
 function _ch {
-    git checkout ${VERSION}-ticket-$2
+    if [ -n "$3" ]; then
+        git checkout ${VERSION}-ticket-$2-$3
+    else
+        git checkout ${VERSION}-ticket-$2
+    fi
+    #git checkout ${VERSION}-ticket-$2
 }
 function _chs {
     git checkout ${STAGING}-ticket-$2
@@ -17,9 +22,14 @@ function _chs {
 
 # branch
 function _b {
+  TICKET=$2
   _check_ticket
   BRANCH_NAME="$(git rev-parse --abbrev-ref HEAD)-ticket-$TICKET"
-  git checkout -b $BRANCH_NAME
+  if [ -n "$3" ]; then
+    git checkout -b $BRANCH_NAME-$3
+  else
+    git checkout -b $BRANCH_NAME
+  fi
 }
 
 function _chm {
