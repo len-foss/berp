@@ -20,11 +20,37 @@ function _chs {
     git checkout ${STAGING}-ticket-$2
 }
 
+# checkout task branch
+function _cht {
+    if [ -n "$3" ]; then
+        git checkout ${VERSION}-task-$2-$3
+    else
+        git checkout ${VERSION}-task-$2
+    fi
+}
+function _chst {
+    git checkout ${STAGING}-task-$2
+}
+
 # branch
 function _b {
   TICKET=$2
   _check_ticket
   BRANCH_NAME="$(git rev-parse --abbrev-ref HEAD)-ticket-$TICKET"
+  if [ -n "$3" ]; then
+    git checkout -b $BRANCH_NAME-$3
+  else
+    git checkout -b $BRANCH_NAME
+  fi
+}
+
+# branch for task
+function _bt {
+  TICKET=$2
+  BRANCH_TYPE="task"
+  export BRANCH_TYPE
+  _check_ticket
+  BRANCH_NAME="$(git rev-parse --abbrev-ref HEAD)-task-$TICKET"
   if [ -n "$3" ]; then
     git checkout -b $BRANCH_NAME-$3
   else
@@ -42,18 +68,39 @@ function _chms {
 function _check_ticket {
   if [ -z "$TICKET" ]; then
     BRANCH_NAME=$(git rev-parse --abbrev-ref HEAD)
-    if [[ $BRANCH_NAME =~ .*-([0-9]+)-.* ]]; then
+    # Check for task branch pattern
+    if [[ $BRANCH_NAME =~ -task-([0-9]+)(-.*)? ]]; then
       TICKET=${BASH_REMATCH[1]}
+      BRANCH_TYPE="task"
+      echo "Branch task: $TICKET"
+    # Check for ticket branch pattern with suffix
+    elif [[ $BRANCH_NAME =~ -ticket-([0-9]+)(-.*)? ]]; then
+      TICKET=${BASH_REMATCH[1]}
+      BRANCH_TYPE="ticket"
       echo "Branch ticket: $TICKET"
+    # Check for ending with a number (ticket assumed for backward compatibility)
     elif [[ $BRANCH_NAME =~ -([0-9]+)$ ]]; then
       TICKET=${BASH_REMATCH[1]}
+      BRANCH_TYPE="ticket"
       echo "Branch \$ ticket: $TICKET"
     else
       read -p "Please enter the ticket: " TICKET
+      BRANCH_TYPE="ticket"
     fi
     export TICKET
+    export BRANCH_TYPE
   else
     echo "Current ticket: $TICKET"
+    # If BRANCH_TYPE not set, determine it from branch name
+    if [ -z "$BRANCH_TYPE" ]; then
+      BRANCH_NAME=$(git rev-parse --abbrev-ref HEAD)
+      if [[ $BRANCH_NAME =~ -task- ]]; then
+        BRANCH_TYPE="task"
+      else
+        BRANCH_TYPE="ticket"
+      fi
+      export BRANCH_TYPE
+    fi
   fi
 }
 
@@ -110,7 +157,12 @@ function _ccp {
   _check_feature_branch
   _check_ticket
   _chms  # switch to staging
-  _b 0 $TICKET  # switch to a new staging branch 
+  # Create a new staging branch based on the branch type
+  if [ "$BRANCH_TYPE" = "task" ]; then
+    _bt 0 $TICKET  # switch to a new task staging branch
+  else
+    _b 0 $TICKET  # switch to a new ticket staging branch
+  fi
   commits=$(git log --format="%H" ${VERSION}..${CURRENT_BRANCH}) # Cherry-pick the commits onto the VERSION branch 
   echo $commits
   for commit in $commits; do
@@ -125,13 +177,14 @@ function _ccp {
 # show all branches containing ticket
 function _ls {
     git branch --list "*-ticket-$2"
+    git branch --list "*-task-$2"
 }
 
 # commit
 function _c {
   _check_ticket
   local MSG="${2}"
-  COMMIT_NAME="[ticket-$TICKET]"
+  COMMIT_NAME="[${BRANCH_TYPE}-$TICKET]"
   PREFIX_LEN=${#FOLDER}
   FOLDERS=$(git -C "$folder" diff --cached --name-only --diff-filter=ACM | xargs -I {} dirname {} | \
     awk -v folder="$FOLDER" -v flen="$PREFIX_LEN" '{sub("^" folder, ""); sub("/.*", ""); print}' | \
