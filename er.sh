@@ -3,6 +3,10 @@
 FOLDER="custom"
 [[ "${FOLDER}" != */ ]] && FOLDER="${FOLDER}/"
 
+SRC_PATH="~/src"
+DIRS_360=("360_community" "360_generic" "360_ai")
+DIRS_ODOO=("odoo" "enterprise")
+
 VERSION=$(git rev-parse --abbrev-ref HEAD | sed 's/-.*//')
 STAGING=${VERSION}-staging
 CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD)
@@ -200,6 +204,91 @@ function _c {
 # test
 function _t {
   gh workflow run test.yml --ref $(git rev-parse --abbrev-ref HEAD)
+}
+
+# Check if a directory has uncommitted changes (ignoring untracked files)
+function _check_dir_changes {
+  local dir_path="$1"
+  if [ -d "$dir_path" ]; then
+    cd "$dir_path"
+    if [ -n "$(git status --porcelain | grep -v '^??')" ]; then
+      return 0  # Has changes
+    fi
+    return 1  # No changes
+  fi
+  return 1  # Directory doesn't exist
+}
+
+# Process 360 directories
+function _process_360_dirs {
+  local branch="$1"
+  local changed_dirs=()
+  
+  for dir in "${DIRS_360[@]}"; do
+    local dir_path="$SRC_PATH/$dir"
+    if _check_dir_changes "$dir_path"; then
+      changed_dirs+=("$dir")
+    fi
+  done
+  
+  if [ ${#changed_dirs[@]} -gt 0 ]; then
+    echo "Directories with changes: ${changed_dirs[*]}"
+    read -p "Do you want to interrupt the process completely? (y/N): " -n 1 -r
+    echo
+    if [[ $REPLY =~ ^[Yy]$ ]]; then
+      echo "Process interrupted."
+      exit 1
+    fi
+  fi
+  
+  for dir in "${DIRS_360[@]}"; do
+    local dir_path="$SRC_PATH/$dir"
+    if [ -d "$dir_path" ]; then
+      cd "$dir_path"
+      if [ -n "$(git status --porcelain | grep -v '^??')" ]; then
+        echo "Folder $dir is ignored (has changes)"
+      else
+        if ! git checkout "$branch" 2>&1; then
+          echo "Error checking out $branch in $dir"
+        fi
+      fi
+    fi
+  done
+}
+
+# Process Odoo directories
+function _process_odoo_dirs {
+  local branch="$1"
+  
+  for dir in "${DIRS_ODOO[@]}"; do
+    local dir_path="$SRC_PATH/$dir"
+    if [ -d "$dir_path" ]; then
+      cd "$dir_path"
+      if [ -n "$(git status --porcelain)" ]; then
+        git stash
+        echo "Stashed changes in $dir"
+      fi
+      if ! git checkout "$branch" 2>&1; then
+        echo "Error checking out $branch in $dir"
+      fi
+    fi
+  done
+}
+
+# Main checkout function
+function _co {
+  local branch="$1"
+  if [ -z "$branch" ]; then
+    echo "Usage: _co <branch_name>"
+    return 1
+  fi
+  
+  echo "Checking out branch: $branch"
+  
+  _process_360_dirs "$branch"
+  _process_odoo_dirs "$branch"
+  
+  echo "Checkout process completed."
 }
 
 _$1 "$@"
