@@ -291,4 +291,18 @@ function _co {
   echo "Checkout process completed."
 }
 
+function _pr {
+  local current_branch base_branch
+
+  current_branch=$(git rev-parse --abbrev-ref HEAD)
+
+  if [[ "$current_branch" =~ ^([0-9]+\.[0-9]+(-staging)?)-.+$ ]]; then
+    base_branch="${BASH_REMATCH[1]}"
+    gh pr create --base "$base_branch" --head "$current_branch"
+  else
+    echo "❌ Error: Branch name '$current_branch' does not match expected pattern VERSION[-STAGING]-something"
+    return 1
+  fi
+}
+
 _$1 "$@"
